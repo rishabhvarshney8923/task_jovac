@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tagged — Browse Products</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="index.html" class="brand"><span class="tag-dot"></span>TAGGED<small>CATALOG</small></a>
+      <div class="topbar-search">
+        <input type="text" id="searchInput" placeholder="Search products…" />
+      </div>
+      <a href="cart.html" class="cart-link">Cart <span class="cart-count">0</span></a>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-head">
+      <h1>All Products</h1>
+      <span class="page-sub" id="resultCount">loading…</span>
+    </div>
+
+    <div class="filters">
+      <select id="categoryFilter">
+        <option value="">All categories</option>
+      </select>
+      <select id="sortFilter">
+        <option value="">Sort: default</option>
+        <option value="price-asc">Price: low to high</option>
+        <option value="price-desc">Price: high to low</option>
+        <option value="rating-desc">Rating: best first</option>
+        <option value="title-asc">Title: A–Z</option>
+      </select>
+    </div>
+
+    <div id="grid" class="grid"></div>
+    <div id="pager" class="pager"></div>
+  </main>
+
+  <footer>TAGGED · data via dummyjson.com/products</footer>
+
+  <script src="app.js"></script>
+  <script>
+    const API_URL = 'https://dummyjson.com/products?limit=194';
+    const PAGE_SIZE = 24;
+
+    let allProducts = [];
+    let filtered = [];
+    let currentPage = 1;
+
+    const grid = document.getElementById('grid');
+    const pager = document.getElementById('pager');
+    const resultCount = document.getElementById('resultCount');
+    const searchInput = document.getElementById('searchInput');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const sortFilter = document.getElementById('sortFilter');
+
+    function renderSkeleton() {
+      grid.innerHTML = Array.from({ length: 12 }).map(() => `
+        <div class="ticket">
+          <div class="ticket-img skeleton" style="height:160px;"></div>
+          <div class="ticket-body">
+            <div class="skeleton" style="height:10px;width:50%;"></div>
+            <div class="skeleton" style="height:14px;width:90%;"></div>
+            <div class="skeleton" style="height:14px;width:40%;"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadProducts() {
+      renderSkeleton();
+      try {
+        const res = await fetch(API_URL);
+        if (!res.ok) throw new Error('Request failed: ' + res.status);
+        const data = await res.json();
+        allProducts = data.products || [];
+        populateCategories(allProducts);
+        applyFilters();
+      } catch (err) {
+        grid.innerHTML = `<div class="state-msg" style="grid-column:1/-1;">
+          Couldn't load products (${err.message}).<br>Check your connection and refresh.
+        </div>`;
+        resultCount.textContent = 'error';
+      }
+    }
+
+    function populateCategories(products) {
+      const cats = Array.from(new Set(products.map((p) => p.category))).sort();
+      categoryFilter.innerHTML = '<option value="">All categories</option>' +
+        cats.map((c) => `<option value="${c}">${c.replace(/-/g, ' ')}</option>`).join('');
+    }
+
+    function applyFilters() {
+      const term = searchInput.value.trim().toLowerCase();
+      const cat = categoryFilter.value;
+      const sort = sortFilter.value;
+
+      filtered = allProducts.filter((p) => {
+        const matchesTerm = !term || p.title.toLowerCase().includes(term) || (p.brand || '').toLowerCase().includes(term);
+        const matchesCat = !cat || p.category === cat;
+        return matchesTerm && matchesCat;
+      });
+
+      if (sort === 'price-asc') filtered.sort((a, b) => a.price - b.price);
+      if (sort === 'price-desc') filtered.sort((a, b) => b.price - a.price);
+      if (sort === 'rating-desc') filtered.sort((a, b) => b.rating - a.rating);
+      if (sort === 'title-asc') filtered.sort((a, b) => a.title.localeCompare(b.title));
+
+      currentPage = 1;
+      renderPage();
+    }
+
+    function renderPage() {
+      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+      currentPage = Math.min(currentPage, totalPages);
+      const start = (currentPage - 1) * PAGE_SIZE;
+      const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
+      resultCount.textContent = `${filtered.length} item${filtered.length === 1 ? '' : 's'} · page ${currentPage}/${totalPages}`;
+
+      if (pageItems.length === 0) {
+        grid.innerHTML = `<div class="state-msg" style="grid-column:1/-1;">No products match your search.</div>`;
+      } else {
+        grid.innerHTML = pageItems.map(renderTicket).join('');
+      }
+
+      renderPager(totalPages);
+      attachGridHandlers();
+    }
+
+    function stockLabel(stock) {
+      if (stock <= 0) return '<span class="stock-tag out">OUT OF STOCK</span>';
+      if (stock < 10) return `<span class="stock-tag low">${stock} LEFT</span>`;
+      return '<span class="stock-tag ok">IN STOCK</span>';
+    }
+
+    function renderTicket(p) {
+      const finalPrice = discountedPrice(p.price, p.discountPercentage);
+      const hasDiscount = p.discountPercentage > 0;
+      return `
+        <article class="ticket" data-id="${p.id}" tabindex="0">
+          <div class="ticket-perf"></div>
+          <div class="ticket-img"><img src="${p.thumbnail}" alt="${p.title}" loading="lazy" /></div>
+          <div class="ticket-body">
+            <span class="ticket-cat">${p.category.replace(/-/g, ' ')}</span>
+            <span class="ticket-title">${p.title}</span>
+            <div class="ticket-row">
+              <span>
+                ${hasDiscount ? `<span class="price-was">${money(p.price)}</span>` : ''}
+                <span class="price">${money(finalPrice)}</span>
+              </span>
+              ${hasDiscount ? `<span class="badge-discount">-${Math.round(p.discountPercentage)}%</span>` : ''}
+            </div>
+            ${stockLabel(p.stock)}
+            <button class="add-btn" data-add="${p.id}" ${p.stock <= 0 ? 'disabled' : ''}>
+              ${p.stock <= 0 ? 'Unavailable' : 'Add to cart'}
+            </button>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderPager(totalPages) {
+      if (totalPages <= 1) { pager.innerHTML = ''; return; }
+      let html = `<button data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>‹</button>`;
+      const windowSize = 2;
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= windowSize) {
+          html += `<button data-page="${i}" class="${i === currentPage ? 'active' : ''}">${i}</button>`;
+        } else if (Math.abs(i - currentPage) === windowSize + 1) {
+          html += `<button disabled>…</button>`;
+        }
+      }
+      html += `<button data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>›</button>`;
+      pager.innerHTML = html;
+      pager.querySelectorAll('button[data-page]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const p = parseInt(btn.dataset.page, 10);
+          if (!isNaN(p)) { currentPage = p; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        });
+      });
+    }
+
+    function attachGridHandlers() {
+      grid.querySelectorAll('.ticket').forEach((card) => {
+        const go = () => { window.location.href = `product.html?id=${card.dataset.id}`; };
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('[data-add]')) return;
+          go();
+        });
+        card.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      });
+      grid.querySelectorAll('[data-add]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = parseInt(btn.dataset.add, 10);
+          const product = allProducts.find((p) => p.id === id);
+          if (product) {
+            addToCart(product, 1);
+            showToast(`Added “${product.title}” to cart`, 'cart.html', 'View cart');
+          }
+        });
+      });
+    }
+
+    searchInput.addEventListener('input', debounce(applyFilters, 250));
+    categoryFilter.addEventListener('change', applyFilters);
+    sortFilter.addEventListener('change', applyFilters);
+
+    function debounce(fn, ms) {
+      let t;
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    loadProducts();
+  </script>
+</body>
+</html>

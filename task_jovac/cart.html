@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tagged — Your Cart</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="index.html" class="brand"><span class="tag-dot"></span>TAGGED<small>CATALOG</small></a>
+      <div class="topbar-search">
+        <input type="text" placeholder="Search products…" onkeydown="if(event.key==='Enter'){window.location.href='index.html'}" />
+      </div>
+      <a href="cart.html" class="cart-link">Cart <span class="cart-count">0</span></a>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="breadcrumb"><a href="index.html">← Continue shopping</a></div>
+    <div class="page-head">
+      <h1>Your Cart</h1>
+      <span class="page-sub" id="itemSummary"></span>
+    </div>
+
+    <div id="cartArea"></div>
+  </main>
+
+  <footer>TAGGED · data via dummyjson.com/products</footer>
+
+  <script src="app.js"></script>
+  <script>
+    const cartArea = document.getElementById('cartArea');
+    const itemSummary = document.getElementById('itemSummary');
+
+    function render() {
+      const cart = getCart();
+      const totals = cartTotals();
+      itemSummary.textContent = cart.length ? `${totals.itemCount} item${totals.itemCount === 1 ? '' : 's'}` : '';
+
+      if (cart.length === 0) {
+        cartArea.innerHTML = `
+          <div class="empty-cart">
+            <h2>Your cart is empty</h2>
+            <p>Tag a few things you like and they'll show up here.</p>
+            <a class="btn-primary" href="index.html" style="display:inline-block;">Browse products</a>
+          </div>
+        `;
+        return;
+      }
+
+      cartArea.innerHTML = `
+        <div class="cart-layout">
+          <div class="cart-items">
+            ${cart.map(renderRow).join('')}
+          </div>
+          ${renderReceipt(totals)}
+        </div>
+      `;
+
+      attachHandlers();
+    }
+
+    function renderRow(item) {
+      const unit = discountedPrice(item.price, item.discountPercentage);
+      return `
+        <div class="cart-row" data-id="${item.id}">
+          <img src="${item.thumbnail}" alt="${item.title}" />
+          <div>
+            <div class="cart-row-title">${item.title}</div>
+            <div class="cart-row-meta">${money(unit)} each${item.discountPercentage ? ` · -${Math.round(item.discountPercentage)}%` : ''}</div>
+            <button class="remove-btn" data-remove="${item.id}">Remove</button>
+          </div>
+          <div class="qty-control">
+            <button data-minus="${item.id}">–</button>
+            <span>${item.qty}</span>
+            <button data-plus="${item.id}">+</button>
+          </div>
+          <div class="cart-row-price">${money(unit * item.qty)}</div>
+        </div>
+      `;
+    }
+
+    function renderReceipt(t) {
+      return `
+        <div class="receipt">
+          <h2>🧾 Bill Summary</h2>
+          <div class="receipt-row"><span>Subtotal</span><span>${money(t.subtotal)}</span></div>
+          ${t.savings > 0 ? `<div class="receipt-row"><span>Discount savings</span><span>−${money(t.savings)}</span></div>` : ''}
+          <div class="receipt-row"><span>Tax (8%)</span><span>${money(t.tax)}</span></div>
+          <div class="receipt-row"><span>Shipping</span><span>Free</span></div>
+          <div class="receipt-divider"></div>
+          <div class="receipt-total"><span>Total</span><span class="price">${money(t.total)}</span></div>
+          ${t.savings > 0 ? `<div class="savings-note">You're saving ${money(t.savings)} on this order</div>` : ''}
+          <button class="btn-primary" style="width:100%;margin-bottom:10px;" onclick="alert('Checkout flow is out of scope for this assignment — bill summary above is the deliverable.')">Checkout</button>
+          <a class="continue-link" href="index.html">← Continue shopping</a>
+        </div>
+      `;
+    }
+
+    function attachHandlers() {
+      cartArea.querySelectorAll('[data-plus]').forEach((btn) =>
+        btn.addEventListener('click', () => {
+          const id = parseInt(btn.dataset.plus, 10);
+          const item = getCart().find((i) => i.id === id);
+          updateQty(id, item.qty + 1);
+          render();
+        })
+      );
+      cartArea.querySelectorAll('[data-minus]').forEach((btn) =>
+        btn.addEventListener('click', () => {
+          const id = parseInt(btn.dataset.minus, 10);
+          const item = getCart().find((i) => i.id === id);
+          updateQty(id, item.qty - 1);
+          render();
+        })
+      );
+      cartArea.querySelectorAll('[data-remove]').forEach((btn) =>
+        btn.addEventListener('click', () => {
+          removeFromCart(parseInt(btn.dataset.remove, 10));
+          render();
+        })
+      );
+    }
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tagged — Product Detail</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="index.html" class="brand"><span class="tag-dot"></span>TAGGED<small>CATALOG</small></a>
+      <div class="topbar-search">
+        <input type="text" id="searchInput" placeholder="Search products…" onkeydown="if(event.key==='Enter'){window.location.href='index.html'}" />
+      </div>
+      <a href="cart.html" class="cart-link">Cart <span class="cart-count">0</span></a>
+    </div>
+  </header>
+
+  <main class="page" id="page">
+    <div class="breadcrumb"><a href="index.html">← Back to all products</a></div>
+    <div id="content">
+      <div class="state-msg">loading product…</div>
+    </div>
+  </main>
+
+  <footer>TAGGED · data via dummyjson.com/products</footer>
+
+  <script src="app.js"></script>
+  <script>
+    const id = qs('id');
+    const content = document.getElementById('content');
+    let currentProduct = null;
+    let currentQty = 1;
+
+    async function loadProduct() {
+      if (!id) {
+        content.innerHTML = `<div class="state-msg">No product selected. <a href="index.html">Go back</a>.</div>`;
+        return;
+      }
+      try {
+        const res = await fetch(`https://dummyjson.com/products/${id}`);
+        if (!res.ok) throw new Error('Product not found');
+        currentProduct = await res.json();
+        document.title = `${currentProduct.title} — Tagged`;
+        render(currentProduct);
+      } catch (err) {
+        content.innerHTML = `<div class="state-msg">Couldn't load this product (${err.message}). <a href="index.html">Back to catalog</a>.</div>`;
+      }
+    }
+
+    function render(p) {
+      const images = (p.images && p.images.length ? p.images : [p.thumbnail]);
+      const finalPrice = discountedPrice(p.price, p.discountPercentage);
+      const hasDiscount = p.discountPercentage > 0;
+
+      content.innerHTML = `
+        <div class="product-detail">
+          <div>
+            <div class="gallery-main"><img id="mainImg" src="${images[0]}" alt="${p.title}" /></div>
+            <div class="gallery-thumbs">
+              ${images.map((src, i) => `<img src="${src}" data-i="${i}" class="${i === 0 ? 'active' : ''}" alt="thumbnail ${i + 1}" />`).join('')}
+            </div>
+          </div>
+          <div>
+            <span class="detail-cat">${p.category.replace(/-/g, ' ')}</span>
+            <h1 class="detail-title">${p.title}</h1>
+            ${p.brand ? `<div class="detail-brand">by ${p.brand}</div>` : ''}
+            <div class="rating-row">
+              <span class="stars">${starString(p.rating)}</span>
+              <span class="mono">${p.rating.toFixed(2)}</span>
+              <span>· ${stockLabel(p.stock)}</span>
+            </div>
+            <div class="price-block">
+              ${hasDiscount ? `<span class="price-was">${money(p.price)}</span>` : ''}
+              <span class="price">${money(finalPrice)}</span>
+              ${hasDiscount ? `<span class="badge-discount">save ${Math.round(p.discountPercentage)}%</span>` : ''}
+            </div>
+            <p class="detail-desc">${p.description}</p>
+
+            <div class="ticket-strip">
+              <div class="row"><span>SKU</span><span>${p.sku || p.id}</span></div>
+              <div class="row"><span>Stock</span><span>${p.stock} units</span></div>
+              <div class="row"><span>Warranty</span><span>${p.warrantyInformation || '—'}</span></div>
+              <div class="row"><span>Shipping</span><span>${p.shippingInformation || '—'}</span></div>
+              <div class="row"><span>Return policy</span><span>${p.returnPolicy || '—'}</span></div>
+              <div class="row"><span>Min order</span><span>${p.minimumOrderQuantity || 1}</span></div>
+            </div>
+
+            <div class="qty-control">
+              <button id="qtyMinus">–</button>
+              <span id="qtyVal">1</span>
+              <button id="qtyPlus">+</button>
+            </div>
+
+            <div class="cta-row">
+              <button class="btn-primary" id="addBtn" ${p.stock <= 0 ? 'disabled' : ''}>
+                ${p.stock <= 0 ? 'Out of stock' : 'Add to cart'}
+              </button>
+              <a class="btn-secondary" href="cart.html">View cart</a>
+            </div>
+          </div>
+        </div>
+      `;
+
+      attachHandlers(images);
+    }
+
+    function stockLabel(stock) {
+      if (stock <= 0) return '<span class="stock-tag out">OUT OF STOCK</span>';
+      if (stock < 10) return `<span class="stock-tag low">${stock} LEFT</span>`;
+      return '<span class="stock-tag ok">IN STOCK</span>';
+    }
+
+    function attachHandlers(images) {
+      document.querySelectorAll('.gallery-thumbs img').forEach((img) => {
+        img.addEventListener('click', () => {
+          document.getElementById('mainImg').src = images[img.dataset.i];
+          document.querySelectorAll('.gallery-thumbs img').forEach((t) => t.classList.remove('active'));
+          img.classList.add('active');
+        });
+      });
+
+      const qtyVal = document.getElementById('qtyVal');
+      document.getElementById('qtyMinus').addEventListener('click', () => {
+        currentQty = Math.max(1, currentQty - 1);
+        qtyVal.textContent = currentQty;
+      });
+      document.getElementById('qtyPlus').addEventListener('click', () => {
+        currentQty = Math.min(currentProduct.stock || 99, currentQty + 1);
+        qtyVal.textContent = currentQty;
+      });
+
+      document.getElementById('addBtn').addEventListener('click', () => {
+        addToCart(currentProduct, currentQty);
+        showToast(`Added ${currentQty} × “${currentProduct.title}” to cart`, 'cart.html', 'View cart');
+      });
+    }
+
+    loadProduct();
+  </script>
+</body>
+</html>
